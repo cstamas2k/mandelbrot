@@ -1,16 +1,21 @@
 #include <SDL.h>
 #include <iostream>
 #include <cmath>
-
+#include <thread>
+#include <vector>
 
 static const int MAXITERATIONS = 127;
-int WHEIGHT = 720;
-int WWIDTH = 1280;
+
+static const int WWIDTH = 1920;
+static const int WHEIGHT = 1080;
+
 SDL_Color colorLookup[MAXITERATIONS];
 
 double zoom = 0.004;
 double offsetx = 0.00;
 double offsety = 0.00;
+
+SDL_Color screenbuffer[WWIDTH][WHEIGHT];
 
 
 int mandelbrot(double startReal, double startImag) {
@@ -29,6 +34,55 @@ int mandelbrot(double startReal, double startImag) {
 	return MAXITERATIONS;
 }
 
+void topLeft(SDL_Renderer *renderer) {
+	for (int x = 0; x < WWIDTH / 2; x++)
+		for (int y = 0; y < WHEIGHT / 2; y++) {
+			double real = (x - WWIDTH / 2.0) * zoom + offsety;
+			double imag = (y - WHEIGHT / 2.0) * zoom + offsetx;
+			int iters = mandelbrot(real, imag);
+			//std::cout << "iterations: " << iters << std::endl;
+			SDL_Color rcolor = colorLookup[iters];
+			screenbuffer[x][y] = rcolor;
+		}
+}
+
+void bottomRight(SDL_Renderer *renderer) {
+	for (int x = WWIDTH / 2; x < WWIDTH; x++)
+		for (int y = WHEIGHT / 2; y < WHEIGHT; y++) {
+			double real = (x - WWIDTH / 2.0) * zoom + offsety;
+			double imag = (y - WHEIGHT / 2.0) * zoom + offsetx;
+			int iters = mandelbrot(real, imag);
+			//std::cout << "iterations: " << iters << std::endl;
+			SDL_Color rcolor = colorLookup[iters];
+			screenbuffer[x][y] = rcolor;
+		}
+}
+
+void topRight(SDL_Renderer *renderer) {
+	for (int x = WWIDTH / 2; x < WWIDTH; x++)
+		for (int y = 0; y < WHEIGHT / 2; y++) {
+			double real = (x - WWIDTH / 2.0) * zoom + offsety;
+			double imag = (y - WHEIGHT / 2.0) * zoom + offsetx;
+			int iters = mandelbrot(real, imag);
+			//std::cout << "iterations: " << iters << std::endl;
+			SDL_Color rcolor = colorLookup[iters];
+			screenbuffer[x][y] = rcolor;
+		}
+}
+
+void bottomLeft(SDL_Renderer *renderer) {
+	for (int x = 0; x < WWIDTH / 2; x++)
+		for (int y = WHEIGHT / 2; y < WHEIGHT; y++) {
+			double real = (x - WWIDTH / 2.0) * zoom + offsety;
+			double imag = (y - WHEIGHT / 2.0) * zoom + offsetx;
+			int iters = mandelbrot(real, imag);
+			//std::cout << "iterations: " << iters << std::endl;
+			SDL_Color rcolor = colorLookup[iters];
+			screenbuffer[x][y] = rcolor;
+		}
+}
+
+
 int main(int argc, char* argv[]) {
 	for (int i = 0; i < MAXITERATIONS; i++) {
 		int r, g, b;
@@ -43,13 +97,13 @@ int main(int argc, char* argv[]) {
 			b = 16 * (16 - i);
 		}
 		else if (i < 32) {
-			g = 16 * (i - 16);
+			g = 32 * (i - 32);
 			r = 0;
-			b = 16 * (32 - i) - 1;
+			b = 32 * (32 - i) - 1;
 		}
 		else if (i < 64) {
-			r = 8 * (i - 32);
-			g = 8 * (64 - i) - 1;
+			r = 64 * (i - 64);
+			g = 64 * (64 - i) - 1;
 			b = 0;
 		}
 		else {
@@ -97,17 +151,25 @@ int main(int argc, char* argv[]) {
 			std::cout << "Zoom level: " << zoom << std::endl;
 			std::cout << "X offset: " << offsetx << std::endl;
 			std::cout << "Y offset: " << offsety << std::endl;
-			SDL_RenderClear(renderer);
-			for (int x = 0; x < WWIDTH; x++) 
+			
+			std::vector<std::thread> threads;
+
+			threads.push_back(std::thread(topLeft, renderer));
+			threads.push_back(std::thread(topRight, renderer));
+			threads.push_back(std::thread(bottomLeft, renderer));
+			threads.push_back(std::thread(bottomRight, renderer));
+
+			for (auto &t : threads) {
+				t.join();
+			}
+
+			for (int x = 0; x < WWIDTH; x++)
 				for (int y = 0; y < WHEIGHT; y++) {
-					double real = (x - WWIDTH / 2.0) * zoom + offsety;
-					double imag = (y - WHEIGHT / 2.0) * zoom + offsetx;
-					int iters = mandelbrot(real, imag);
-					//std::cout << "iterations: " << iters << std::endl;
-					SDL_Color rcolor = colorLookup[iters];
-					SDL_SetRenderDrawColor(renderer, rcolor.r, rcolor.g, rcolor.b, 255);
+					SDL_SetRenderDrawColor(renderer, screenbuffer[x][y].r, screenbuffer[x][y].g, screenbuffer[x][y].b, 255);
 					SDL_RenderDrawPoint(renderer, x, y);
 				}
+			
+
 			needRedraw = false;
 			std::cout << "done!\n";
 		}
