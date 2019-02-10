@@ -5,33 +5,34 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <limits>
+#include <complex>
 
-static const int MAXITERATIONS = 255;
+static const int MAXITERATIONS = 1023;
 
-static const int WWIDTH = 3840;
-static const int WHEIGHT = 2160;
+static const int WWIDTH = 640;
+static const int WHEIGHT = 480;
 
 SDL_Color colorLookup[MAXITERATIONS];
 
-double zoom = 0.004;
-double offsetx = 0.00;
-double offsety = 0.00;
+long double zoom = 1.004;
+long double offsetx = -0.01;
+long double offsety = 0.01;
 
 SDL_Color screenbuffer[WWIDTH][WHEIGHT];
 
 
-int mandelbrot(double startReal, double startImag) {
-	double zReal = startReal;
-	double zImag = startImag;
+int mandelbrot(std::complex<long double> inComplex) {
+	std::complex<long double> myComplex = inComplex;
 
 	for (int counter = 0; counter < MAXITERATIONS; ++counter) {
-		double r2 = zReal * zReal;
-		double i2 = zImag * zImag;
-		if (r2 + i2 > 4.0) {
+
+		std::complex<long double> myComplex2(myComplex.real() * myComplex.real(), myComplex.imag() * myComplex.imag());
+
+		if (myComplex2.real() + myComplex2.imag() > 4.0) {
 			return counter;
 		}
-		zImag = 2.0 * zReal * zImag + startImag;
-		zReal = r2 - i2 + startReal;
+		myComplex = std::complex<long double>(myComplex2.real() - myComplex2.imag() + inComplex.real(), 2.0 * myComplex.real() * myComplex.imag() + inComplex.imag());
 	}
 	return MAXITERATIONS;
 }
@@ -40,10 +41,8 @@ int mandelbrot(double startReal, double startImag) {
 void calculateQuarter(SDL_Renderer *renderer, int startx, int endx, int starty, int endy) {
 	for (int x = startx; x < endx; x++)
 		for (int y = starty; y < endy; y++) {
-			double real = (x - WWIDTH / 2.0) * zoom + offsety;
-			double imag = (y - WHEIGHT / 2.0) * zoom + offsetx;
-			int iters = mandelbrot(real, imag);
-			//std::cout << "iterations: " << iters << std::endl;
+			std::complex<long double> mandelComplex((x - WWIDTH / 2.0) / zoom + offsety, (y - WHEIGHT / 2.0) / zoom + offsetx);
+			int iters = mandelbrot(mandelComplex);
 			SDL_Color rcolor = colorLookup[iters];
 			screenbuffer[x][y] = rcolor;
 		}
@@ -108,34 +107,42 @@ int main(int argc, char* argv[]) {
 	//end of color table filling
 
 	//window handling
-	SDL_Window *window = SDL_CreateWindow("Mandelbrot set renderer in SDL | cstamas2k", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WWIDTH / 4, WHEIGHT / 4, SDL_WINDOW_SHOWN);
+	SDL_Window *window = SDL_CreateWindow("Mandelbrot set renderer in SDL | cstamas2k", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WWIDTH, WHEIGHT, SDL_WINDOW_SHOWN);
 	SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 	SDL_Event event;
 
 	bool shouldRun = true;
 	bool needRedraw = true;
+	bool ignoreZoomAtSpeed = false;
 
 	while (shouldRun) {
 		SDL_PollEvent(&event);
 		if (event.type == SDL_QUIT || (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_q)) shouldRun = false;
 
+
+		// moving factor
+		long double movingSpeed = zoom / std::numeric_limits<long double>::max() * 10000;
+		int movePixels = 2;
+		if (ignoreZoomAtSpeed) movePixels = 8;
 		if (event.type == SDL_KEYDOWN) {
 			needRedraw = true;
 			switch (event.key.keysym.sym) {
 			case SDLK_i: zoom *= 0.9; break;
 			case SDLK_k: zoom /= 0.9; break;
 
-			case SDLK_UP: offsetx -= 40 * zoom; break;
-			case SDLK_DOWN: offsetx += 40 * zoom; break;
-			case SDLK_LEFT: offsety -= 40 * zoom; break;
-			case SDLK_RIGHT: offsety += 40 * zoom; break;
+			case SDLK_UP: offsetx -= (1 / zoom) * movePixels; break;
+			case SDLK_DOWN: offsetx += (1 / zoom) * movePixels; break;
+			case SDLK_LEFT: offsety -= (1 / zoom) * movePixels; break;
+			case SDLK_RIGHT: offsety += (1 / zoom) * movePixels; break;
 			case SDLK_s: saveImage(); break;
+			case SDLK_LSHIFT: ignoreZoomAtSpeed = !ignoreZoomAtSpeed; break;
 			default: needRedraw = false; break;
 			}
 			system("cls");
 		}
 
 		if (needRedraw) {
+			std::cout << "ignore moving speed: " << ignoreZoomAtSpeed << "\n";
 			std::cout << "Zoom level: " << zoom << std::endl;
 			std::cout << "X offset: " << offsetx << std::endl;
 			std::cout << "Y offset: " << offsety << std::endl;
@@ -151,10 +158,10 @@ int main(int argc, char* argv[]) {
 				t.join();
 			}
 
-			for (int x = 0; x < WWIDTH; x += 4)
-				for (int y = 0; y < WHEIGHT; y +=4) {
+			for (int x = 0; x < WWIDTH; x++)
+				for (int y = 0; y < WHEIGHT; y++) {
 						SDL_SetRenderDrawColor(renderer, screenbuffer[x][y].r, screenbuffer[x][y].g, screenbuffer[x][y].b, 255);
-						SDL_RenderDrawPoint(renderer, x / 4, y / 4);
+						SDL_RenderDrawPoint(renderer, x, y);
 				}
 
 			needRedraw = false;
