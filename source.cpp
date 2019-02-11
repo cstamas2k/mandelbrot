@@ -1,25 +1,23 @@
 #include <SDL.h>
 #include <iostream>
-#include <cmath>
 #include <thread>
 #include <vector>
 #include <string>
 #include <fstream>
-#include <limits>
 #include <complex>
 
 static const int MAXITERATIONS = 1023;
-
-static const int WWIDTH = 640;
-static const int WHEIGHT = 480;
+static const long double WWIDTH = 640;
+static const long double WHEIGHT = 480;
 
 SDL_Color colorLookup[MAXITERATIONS];
+SDL_Color screenbuffer[640][480];
 
 long double zoom = 1.004;
 long double offsetx = -0.01;
 long double offsety = 0.01;
 
-SDL_Color screenbuffer[WWIDTH][WHEIGHT];
+
 
 
 int mandelbrot(std::complex<long double> inComplex) {
@@ -29,19 +27,20 @@ int mandelbrot(std::complex<long double> inComplex) {
 
 		std::complex<long double> myComplex2(myComplex.real() * myComplex.real(), myComplex.imag() * myComplex.imag());
 
-		if (myComplex2.real() + myComplex2.imag() > 4.0) {
+		if (myComplex2.real() + myComplex2.imag() > 4.0L) {
 			return counter;
 		}
-		myComplex = std::complex<long double>(myComplex2.real() - myComplex2.imag() + inComplex.real(), 2.0 * myComplex.real() * myComplex.imag() + inComplex.imag());
+
+		myComplex = std::complex<long double>(myComplex2.real() - myComplex2.imag() + inComplex.real(), 2.0L * myComplex.real() * myComplex.imag() + inComplex.imag());
 	}
 	return MAXITERATIONS;
 }
 
 
-void calculateQuarter(SDL_Renderer *renderer, int startx, int endx, int starty, int endy) {
+void calculateSegment(SDL_Renderer *renderer, int startx, int endx, int starty, int endy) {
 	for (int x = startx; x < endx; x++)
 		for (int y = starty; y < endy; y++) {
-			std::complex<long double> mandelComplex((x - WWIDTH / 2.0) / zoom + offsety, (y - WHEIGHT / 2.0) / zoom + offsetx);
+			std::complex<long double> mandelComplex((long double)(x - WWIDTH / 2.0L) / zoom + offsety, (long double)(y - WHEIGHT / 2.0L) / zoom + offsetx);
 			int iters = mandelbrot(mandelComplex);
 			SDL_Color rcolor = colorLookup[iters];
 			screenbuffer[x][y] = rcolor;
@@ -49,10 +48,7 @@ void calculateQuarter(SDL_Renderer *renderer, int startx, int endx, int starty, 
 }
 
 
-void saveImage() {
-	std::string filename = "test.ppm";
-	std::cout << "enter filename: ";
-	std::cin >> filename;
+void saveImage(std::string filename) {
 	std::ofstream outFile(filename);
 	outFile << "P3\n";
 	outFile << WWIDTH << " " << WHEIGHT << "\n";
@@ -63,11 +59,21 @@ void saveImage() {
 		for (int x = 0; x < WWIDTH; x++) {
 			outFile << (int)screenbuffer[x][y].r << " " << (int)screenbuffer[x][y].g << " " << (int)screenbuffer[x][y].b << " ";
  		}
+
 		outFile << "\n";
 	}
-	std::cout << "done saving...\n";
 }
 
+void debugPixel() {
+	int mousex, mousey;
+	SDL_GetMouseState(&mousex, &mousey);
+
+	std::complex<long double> mandelComplex((mousex - WWIDTH / 2.0) / zoom + offsety, (mousey - WHEIGHT / 2.0) / zoom + offsetx);
+	int iters = mandelbrot(mandelComplex);
+	
+	std::cout << "DEBUG: \n iterations: " << (int)iters << "\n complex number: " << mandelComplex << "\n";
+	system("pause");
+}
 
 int main(int argc, char* argv[]) {
 	//color table filling
@@ -114,18 +120,17 @@ int main(int argc, char* argv[]) {
 	bool shouldRun = true;
 	bool needRedraw = true;
 	bool ignoreZoomAtSpeed = false;
+	bool doOutZoom = false;
 
 	while (shouldRun) {
 		SDL_PollEvent(&event);
 		if (event.type == SDL_QUIT || (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_q)) shouldRun = false;
 
-
-		// moving factor
-		long double movingSpeed = zoom / std::numeric_limits<long double>::max() * 10000;
 		int movePixels = 2;
 		if (ignoreZoomAtSpeed) movePixels = 8;
 		if (event.type == SDL_KEYDOWN) {
 			needRedraw = true;
+			std::string file;
 			switch (event.key.keysym.sym) {
 			case SDLK_i: zoom *= 0.9; break;
 			case SDLK_k: zoom /= 0.9; break;
@@ -134,11 +139,25 @@ int main(int argc, char* argv[]) {
 			case SDLK_DOWN: offsetx += (1 / zoom) * movePixels; break;
 			case SDLK_LEFT: offsety -= (1 / zoom) * movePixels; break;
 			case SDLK_RIGHT: offsety += (1 / zoom) * movePixels; break;
-			case SDLK_s: saveImage(); break;
+			case SDLK_s: std::cout << "enter filename: "; std::cin >> file; saveImage(file); break;
 			case SDLK_LSHIFT: ignoreZoomAtSpeed = !ignoreZoomAtSpeed; break;
+			case SDLK_d: debugPixel(); break;
+			case SDLK_g: doOutZoom = true; break;
 			default: needRedraw = false; break;
 			}
 			system("cls");
+		}
+
+
+		while (doOutZoom && zoom > 10) {
+			saveImage(std::to_string(zoom));
+			zoom *= 0.9;
+			needRedraw = true;
+			std::cout << "done " << std::to_string(zoom) << "...\n";
+		}
+
+		if (zoom <= 10) {
+			doOutZoom = false;
 		}
 
 		if (needRedraw) {
@@ -149,10 +168,10 @@ int main(int argc, char* argv[]) {
 
 			std::vector<std::thread> threads;
 
-			threads.push_back(std::thread(calculateQuarter, renderer, 0, WWIDTH / 2, 0, WHEIGHT / 2)); //top left
-			threads.push_back(std::thread(calculateQuarter, renderer, WWIDTH / 2, WWIDTH, 0, WHEIGHT / 2)); //top right
-			threads.push_back(std::thread(calculateQuarter, renderer, 0, WWIDTH / 2, WHEIGHT / 2, WHEIGHT)); //bottom left
-			threads.push_back(std::thread(calculateQuarter, renderer, WWIDTH / 2, WWIDTH, WHEIGHT / 2, WHEIGHT)); //bottom right
+			threads.push_back(std::thread(calculateSegment, renderer, 0, WWIDTH / 2, 0, WHEIGHT / 2)); //top left
+			threads.push_back(std::thread(calculateSegment, renderer, WWIDTH / 2, WWIDTH, 0, WHEIGHT / 2)); //top right
+			threads.push_back(std::thread(calculateSegment, renderer, 0, WWIDTH / 2, WHEIGHT / 2, WHEIGHT)); //bottom left
+			threads.push_back(std::thread(calculateSegment, renderer, WWIDTH / 2, WWIDTH, WHEIGHT / 2, WHEIGHT)); //bottom right
 
 			for (auto &t : threads) {
 				t.join();
